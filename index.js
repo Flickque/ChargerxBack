@@ -7,7 +7,7 @@ const db = require('./db');
 const bcrypt = require('bcryptjs');
 const passport = require('passport');
 const passportHttp = require('passport-http');
-var Strategy = passportHttp.BasicStrategy;
+let Strategy = passportHttp.BasicStrategy;
 
 const saltRounds = 4;
 
@@ -24,6 +24,7 @@ app.get('/chargers', (req, res) => {
   })
 })
 
+
 app.get('/purchases', (req, res) => {
   db.query('SELECT * FROM purchases').then(results => {
     res.json(results);
@@ -35,45 +36,47 @@ app.get('/hello-protected', passport.authenticate('basic', { session: false }),
 );
 
 app.get('/user', passport.authenticate('basic', { session: false }), (req, res) => {
-
     db.query('SELECT * FROM users WHERE id=?',[req.user.id]).then(results => {
           res.json(results);  
           res.sendStatus(200);          
-    })    
+    })
+});
+
+app.post('/chargers-search', (req, res) => {
+
+    let search = '%'+req.body.search+'%';
+    //let search = "%rIs%"
+    db.query("SELECT * FROM chargers WHERE adress LIKE ? OR title LIKE ? OR latitude LIKE ? OR longitude LIKE ? ORDER BY adress", [search, search, search, search]).then(results => {
+        res.json(results);
+    })
+
+
 
 });
 
 
 app.post('/start-charge', passport.authenticate('basic', { session: false }), (req, res) => {
 
-
   let id = req.body.id;
   let user_id = req.user.id;
   let time_amount = req.body.time_amount;
   let startTime = req.body.startTime;
-  
 
   db.query('SELECT charger_id, date_start, date_end FROM purchases WHERE purchases.user_id = ? AND active=1',[req.user.id]).then(results => {
-          
     if (results.length>0)
     {
         res.sendStatus(404);
     }
     else
     {
-      
-      db.query('INSERT INTO purchases (user_id,charger_id,date_start,date_end,total_amount,time_amount, time ,charge_amount,payed,active) VALUES(?,?,?,?,?,?,?,?,?,?)', 
+      db.query('INSERT INTO purchases (user_id,charger_id,date_start,date_end,total_amount,time_amount, time ,charge_amount,payed,active) VALUES(?,?,?,?,?,?,?,?,?,?)',
           [user_id, req.body.id, startTime, 0, 0, time_amount, 0, 0, false, true  ]).then(results => {
          
          res.sendStatus(200);
          res.json(results)
-         
-         
       })
-
     }
-  })   
-  
+  })
 });
 
 
@@ -112,16 +115,12 @@ app.post('/pay', passport.authenticate('basic', { session: false }), (req, res) 
   let purchase_id = req.body.id;
   let user_id = req.user.id;
 
-  db.query('SELECT users.money, purchases.total_amount FROM users LEFT OUTER JOIN purchases ON users.id = ? AND purchases.id = ?', [user_id, purchase_id]).then(dbResults => {
-    let money = results[0].money - results[0].total_amount
+  db.query('SELECT users.money, purchases.total_amount FROM users LEFT JOIN purchases ON users.id = ? AND purchases.id = ?', [user_id, purchase_id]).then(ures => {
+    let money = ures[0].money - ures[0].total_amount
     db.query('UPDATE purchases SET payed=1 WHERE id=? ', [purchase_id]).then(results => {})
     db.query('UPDATE users SET money=? WHERE id = ?', [money, user_id]).then(dbResults => {})
-    res.sendStatus(200);
-    res.json(results)
-    
-
+    res.json(ures)
   })
-
 });
 
 
@@ -148,42 +147,25 @@ app.get('/active-chargers',
         }
 );
 
+app.get('/active-chargers',
+    passport.authenticate('basic', { session: false }),
+    (req, res) =>
+    {
+        db.query('SELECT charger_id, date_start, date_end FROM purchases WHERE purchases.user_id = ? AND active=1',[req.user.id]).then(results => {
+            res.json(results);
+            res.sendStatus(200)
+        })
+    }
+);
+
 
 app.get('/purchases-protected',
         passport.authenticate('basic', { session: false }),
         (req, res) => 
         {
-        	let purchases = []
-        	var chargers = []
-        	db.query('SELECT * FROM purchases LEFT JOIN chargers ON purchases.charger_id = chargers.id').then(results => {
+        	db.query('SELECT * FROM chargers LEFT JOIN purchases ON chargers.id = purchases.charger_id').then(results => {
 		    	res.json(results)
 		    })
-		   
-
-		    /*
-				let merged = []	
-			     purchases.forEach((element, i) => {
-				    		         
-			     	merged[i] = {
-			     		id: element.id,
-			     		date_start: element.date_start,	
-			    		date_end: element.date_end,			
-			    		total_amount: element.total_amount,			
-			    		amount: element.amount,	   
-			    		charge_amount: element.charge_amount,	   
-			    		payed: element.active
-			     	}
-			    })
-		    	res.json(merged)
-		    	
-			     purchases.forEach((element, i) => 
-			    	db.query('SELECT * FROM chargers WHERE id = ?', [element.charger_id] ).then(results => {
-			    		merged[i] = results
-					   
-				    })
-		    	);	  
-	    	*/
-		    
         }
 );
 
